@@ -151,7 +151,7 @@ def main() -> int:
     print(f"[LLM]  tool={tool_call['tool']} args={tool_call['args']}")
 
     result = dispatch_tool(tool_call)
-    print(f"[TOOL] {tool_call['tool']} {result}")
+    print(f"[TOOL] {result}")
     print(f"[USER] ← {result}")
 
     return 0

@@ -13,6 +13,7 @@ import json
 import os
 import sys
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 
@@ -77,8 +78,8 @@ def _get_worksheet():
 def append_to_sheet(menu: str, qty: int, price: float) -> dict:
     """Append a sales row to Google Sheets and return the stored payload."""
     worksheet = _get_worksheet()
-    now = datetime.now().astimezone()
-    timestamp = now.strftime("%Y-%m-%dT%H:%M:%S%z")
+    now = datetime.now(ZoneInfo("Asia/Bangkok"))
+    timestamp = now.replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%S")
     total = qty * price
     row = [timestamp, menu, qty, price, total]
     worksheet.append_row(row)

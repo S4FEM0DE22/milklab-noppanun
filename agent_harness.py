@@ -5,17 +5,22 @@ Usage:
 
 รับคำสั่งภาษาไทย ส่งให้ Gemini พร้อม tool schema parse response เป็น tool call
 เรียก tool จริง print trace log
-
-นักศึกษาต้องเติม TODO ใน 3 จุด ใน Session 2 Lab 2.3
 """
 
 import argparse
 import json
 import os
 import sys
+from typing import Any
 
 from dotenv import load_dotenv
-from google import genai
+
+try:
+    from google import genai
+except ImportError:  # pragma: no cover - graceful fallback for environments without dependency
+    genai = None
+
+import sales_logger
 
 
 TOOL_SCHEMA = [
@@ -58,20 +63,80 @@ TOOL_SCHEMA = [
 
 
 def parse_command(cmd: str, api_key: str | None = None) -> dict:
-    """TODO 1: ส่ง cmd ไป Gemini พร้อม TOOL_SCHEMA ขอให้ตอบเป็น JSON {tool, args}
+    """Send the Thai command to Gemini and request a strict JSON tool call."""
+    key = api_key or os.getenv("GOOGLE_API_KEY")
+    if not key:
+        raise RuntimeError("GOOGLE_API_KEY not set in env or argument")
+    if genai is None or not hasattr(genai, "Client"):
+        raise RuntimeError("google.genai is not available")
 
-    Returns dict {"tool": <name>, "args": <dict>}
-    Raises RuntimeError ถ้า parse ไม่ได้
-    """
-    raise NotImplementedError("Implement in Session 2 Lab 2.3 (TODO 1)")
+    client = genai.Client(api_key=key)
+    tool_schema_json = json.dumps(TOOL_SCHEMA, ensure_ascii=False)
+    prompt = f"""คุณคือตัวช่วยจัดการขายของ MilkLab
+
+ผู้ใช้จะส่งคำสั่งภาษาไทย ให้แปลงคำสั่งนั้นเป็นคำสั่ง tool เดียวต่อไปนี้
+Schema:
+{tool_schema_json}
+
+กฎ:
+- ตอบเฉพาะ JSON เท่านั้น ไม่มีคำอธิบาย
+- รูปแบบต้องเป็น {{"tool": "ชื่อ tool", "args": {{...}}}}
+- ถ้าเป็นคำสั่งบันทึกขาย ให้ใช้ log_sale
+- ถ้าสอบถามยอดขายของวันที่ ให้ใช้ query_sales
+- ถ้าเป็นคำสั่งส่งแจ้งเตือน ให้ใช้ send_alert
+
+คำสั่งของผู้ใช้: {cmd}
+"""
+
+    response = client.models.generate_content(
+        model="gemini-2.5-flash", contents=prompt)
+    text = (getattr(response, "text", None) or "").strip()
+    if text.startswith("```"):
+        text = text.strip("`").strip()
+        if text.startswith("json"):
+            text = text[4:].strip()
+
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"Gemini did not return valid JSON: {text}") from exc
+
+    if not isinstance(parsed, dict) or "tool" not in parsed or "args" not in parsed:
+        raise RuntimeError("Gemini response was not a tool call")
+
+    tool_name = parsed["tool"]
+    args = parsed.get("args", {})
+    if not isinstance(args, dict):
+        raise RuntimeError("Tool args must be an object")
+    return {"tool": tool_name, "args": args}
 
 
 def dispatch_tool(tool_call: dict) -> str:
-    """TODO 2: เรียก tool ตาม tool_call["tool"] ด้วย args จริง
+    """Execute the requested tool and return a readable summary."""
+    tool_name = tool_call.get("tool")
+    args = tool_call.get("args", {})
 
-    Returns: ข้อความสรุปผลที่ tool คืน
-    """
-    raise NotImplementedError("Implement in Session 2 Lab 2.3 (TODO 2)")
+    if tool_name == "log_sale":
+        menu = str(args.get("menu", ""))
+        qty = int(args.get("qty", 0))
+        price = float(args.get("price", 0))
+        row = sales_logger.append_to_sheet(menu, qty, price)
+        provider = sales_logger.send_notification(
+            f"บันทึก {menu} x{qty} = {row['total']} บาท")
+        return f"log_sale OK: row appended at {row['timestamp']} via {provider}"
+
+    if tool_name == "query_sales":
+        date = str(args.get("date", ""))
+        total = sales_logger.query_sales(date)
+        return f"ยอดขายวันที่ {date} = {total} บาท"
+
+    if tool_name == "send_alert":
+        message = str(args.get("message", ""))
+        provider = sales_logger.send_notification(message)
+        return f"alert sent via {provider}"
+
+    raise RuntimeError(f"Unsupported tool: {tool_name}")
 
 
 def main() -> int:
@@ -82,7 +147,6 @@ def main() -> int:
 
     print(f"[USER] {args.cmd}")
 
-    # TODO 3: เรียก parse_command then dispatch_tool then print trace ตาม format ใน session-2.md
     tool_call = parse_command(args.cmd)
     print(f"[LLM]  tool={tool_call['tool']} args={tool_call['args']}")
 

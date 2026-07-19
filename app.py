@@ -48,6 +48,7 @@ def load_index():
 
     return model, index, chunks
 
+
 def retrieve_top_k(
     query: str,
     model,
@@ -149,13 +150,14 @@ def main():
 
         with st.chat_message("assistant"):
             with st.spinner("กำลังค้นข้อมูล..."):
-                context = retrieve_top_k(prompt, model, index, chunks, k=5)
+                context = retrieve_top_k(prompt, model, index, chunks, k=3)
                 answer = generate_answer(prompt, context)
             st.write(answer)
             with st.expander("Source chunks"):
                 for i, c in enumerate(context, 1):
                     st.markdown(f"**[{i}]** {c}")
-        st.session_state.messages.append({"role": "assistant", "content": answer})
+        st.session_state.messages.append(
+            {"role": "assistant", "content": answer})
 
 
 if __name__ == "__main__":

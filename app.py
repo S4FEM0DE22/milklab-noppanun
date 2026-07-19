@@ -7,31 +7,121 @@ Deploy: push to GitHub then Actions deploys to HuggingFace Space
 """
 
 import os
+from pathlib import Path
 
+import faiss
 import streamlit as st
+from google import genai
+from sentence_transformers import SentenceTransformer
 
 
 @st.cache_resource
 def load_index():
-    """TODO 1+2+3: โหลด menu_kb.md, split เป็น chunk, encode ด้วย sentence-transformers,
-    สร้าง faiss index. Cache เพราะโหลด model ครั้งแรกใช้เวลา 30 วินาที
+    """โหลด menu_kb.md, แบ่งเป็น chunks และสร้าง embeddings."""
 
-    Returns: (model, index, chunks_list)
-    """
-    raise NotImplementedError("Implement in Session 3 Lab 2.2 (TODO 1-3)")
+    kb_path = Path("menu_kb.md")
 
+    if not kb_path.exists():
+        raise FileNotFoundError("ไม่พบไฟล์ menu_kb.md")
 
-def retrieve_top_k(query: str, model, index, chunks: list[str], k: int = 3) -> list[str]:
-    """TODO 4: encode query, search index, return top-k chunks"""
-    raise NotImplementedError("Implement in Session 3 Lab 2.2 (TODO 4)")
+    text = kb_path.read_text(encoding="utf-8")
+
+    chunks = [
+        chunk.strip()
+        for chunk in text.split("\n\n")
+        if chunk.strip()
+    ]
+
+    model = SentenceTransformer(
+        "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    )
+
+    embeddings = model.encode(
+        chunks,
+        convert_to_numpy=True,
+        normalize_embeddings=True,
+    )
+
+    dimension = embeddings.shape[1]
+    index = faiss.IndexFlatIP(dimension)
+    index.add(embeddings.astype("float32"))
+
+    return model, index, chunks
+
+def retrieve_top_k(
+    query: str,
+    model,
+    index,
+    chunks: list[str],
+    k: int = 3,
+) -> list[str]:
+    """Encode query แล้วค้นหา top-k chunks จาก FAISS."""
+
+    query_embedding = model.encode(
+        [query],
+        convert_to_numpy=True,
+        normalize_embeddings=True,
+    ).astype("float32")
+
+    k = min(k, len(chunks))
+    scores, indices = index.search(query_embedding, k)
+
+    results = []
+
+    for chunk_index in indices[0]:
+        if chunk_index != -1:
+            results.append(chunks[chunk_index])
+
+    return results
 
 
 def generate_answer(query: str, context_chunks: list[str]) -> str:
-    """TODO 5: ส่ง query + context ไป Gemini, return answer
+    """ส่งคำถามและ context ที่ retrieve ได้ไปให้ Gemini สร้างคำตอบ."""
 
-    Hint: build prompt that says "ตอบจากข้อมูลต่อไปนี้เท่านั้น ถ้าไม่มีใน context ให้บอกว่าไม่รู้"
-    """
-    raise NotImplementedError("Implement in Session 3 Lab 2.2 (TODO 5)")
+    api_key = os.getenv("GOOGLE_API_KEY", "").strip()
+
+    if not api_key:
+        raise RuntimeError("ไม่พบ GOOGLE_API_KEY ใน environment")
+
+    if not context_chunks:
+        return "ไม่พบข้อมูลที่เกี่ยวข้องในฐานความรู้ของ MilkLab°"
+
+    context = "\n\n---\n\n".join(context_chunks)
+
+    prompt = f"""
+    คุณคือผู้ช่วยตอบคำถามเกี่ยวกับร้าน MilkLab°
+
+    กฎการตอบ:
+    - ใช้ข้อมูลจาก CONTEXT เท่านั้น
+    - ห้ามแต่งข้อมูลหรือเดา
+    - หากผู้ใช้ถามหลายคำถาม ให้ตอบทุกข้อเป็นรายการ (Bullet List)
+    - หากคำถามข้อใดไม่มีข้อมูลใน CONTEXT ให้ตอบว่า
+    "ไม่พบข้อมูลนี้ในฐานความรู้ของ MilkLab°"
+    - ตอบเป็นภาษาไทย
+    - ตอบสั้น กระชับ และเข้าใจง่าย
+
+    CONTEXT:
+    {context}
+
+    คำถาม:
+    {query}
+
+    คำตอบ:
+    """.strip()
+
+    client = genai.Client(api_key=api_key)
+
+    response = client.models.generate_content(
+        model="gemini-flash-latest",
+        contents=prompt,
+    )
+
+    answer = (response.text or "").strip()
+
+    if not answer:
+        return "ไม่สามารถสร้างคำตอบได้ในขณะนี้"
+
+    return answer
 
 
 def main():
@@ -59,7 +149,7 @@ def main():
 
         with st.chat_message("assistant"):
             with st.spinner("กำลังค้นข้อมูล..."):
-                context = retrieve_top_k(prompt, model, index, chunks)
+                context = retrieve_top_k(prompt, model, index, chunks, k=5)
                 answer = generate_answer(prompt, context)
             st.write(answer)
             with st.expander("Source chunks"):

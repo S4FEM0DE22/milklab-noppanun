@@ -243,7 +243,7 @@ def main():
         ]
 
     for msg in st.session_state.messages:
-        avatar = "GG" if msg["role"] == "assistant" else "YOU"
+        avatar = "🎧" if msg["role"] == "assistant" else "🧑‍🎤"
         with st.chat_message(msg["role"], avatar=avatar):
             st.write(msg["content"])
 
@@ -253,10 +253,10 @@ def main():
 
     if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user", avatar="YOU"):
+        with st.chat_message("user", avatar="🧑‍🎤"):
             st.write(prompt)
 
-        with st.chat_message("assistant", avatar="GG"):
+        with st.chat_message("assistant", avatar="🎧"):
             with st.spinner("กำลังค้นข้อมูล..."):
                 context = retrieve_top_k(prompt, model, index, chunks, k=3)
                 answer = generate_answer(prompt, context)

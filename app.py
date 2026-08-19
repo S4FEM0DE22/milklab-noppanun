@@ -14,6 +14,7 @@ import faiss
 import streamlit as st
 import streamlit.components.v1 as components
 from google import genai
+from google.genai import errors as genai_errors
 from sentence_transformers import SentenceTransformer
 
 
@@ -134,10 +135,25 @@ def generate_answer(query: str, context_chunks: list[str]) -> str:
 
     client = genai.Client(api_key=api_key)
 
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt,
-    )
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+        )
+    except genai_errors.ClientError as exc:
+        error_text = str(exc).lower()
+        status_code = getattr(exc, "code", None) or getattr(
+            exc, "status_code", None)
+        print(f"Gemini client error ({status_code}): {exc}")
+
+        if status_code == 429 or "quota" in error_text or "rate limit" in error_text:
+            return "ขออภัยครับ ตอนนี้ระบบตอบคำถามครบโควต้าชั่วคราวแล้ว กรุณาลองใหม่อีกสักครู่นะครับ"
+        if status_code in {401, 403} or "api key" in error_text or "permission" in error_text:
+            return "ขออภัยครับ ระบบเชื่อมต่อผู้ช่วยไม่ได้ในขณะนี้ กรุณาแจ้งแอดมินตรวจสอบ API key ครับ"
+        return "ขออภัยครับ ระบบผู้ช่วยขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้งหรือติดต่อแอดมินครับ"
+    except genai_errors.APIError as exc:
+        print(f"Gemini API error: {exc}")
+        return "ขออภัยครับ ระบบผู้ช่วยขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้งหรือติดต่อแอดมินครับ"
 
     answer = (response.text or "").strip()
 

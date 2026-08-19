@@ -114,7 +114,7 @@ def generate_answer(query: str, context_chunks: list[str]) -> str:
     client = genai.Client(api_key=api_key)
 
     response = client.models.generate_content(
-        model="gemini-flash-latest",
+        model="gemini-2.5-flash",
         contents=prompt,
     )
 
@@ -127,10 +127,106 @@ def generate_answer(query: str, context_chunks: list[str]) -> str:
 
 
 def main():
-    # ปรับ UI และ Branding ให้เป็นร้านดนตรี
-    st.set_page_config(page_title="Groove & Gear", page_icon="🎸")
-    st.title("🎸 Groove & Gear Assistant")
-    st.caption("แชตบอตผู้ช่วยร้านเครื่องดนตรี ถามสเปค ปรึกษาเรื่องแอมป์ ได้เลย!")
+    st.set_page_config(
+        page_title="Groove & Gear",
+        page_icon="🎸",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+    st.markdown(
+        """
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+        :root {
+            --ink: #f4f1e8;
+            --muted: #a8aaa0;
+            --panel: #171a19;
+            --panel-soft: #202422;
+            --line: rgba(244, 241, 232, 0.12);
+            --lime: #d7f36a;
+            --orange: #ff8a5b;
+        }
+
+        .stApp {
+            background: radial-gradient(circle at 75% 0%, #30372a 0, #111312 36%, #0c0e0d 80%);
+            color: var(--ink);
+            font-family: 'DM Sans', sans-serif;
+        }
+        [data-testid="stHeader"] { background: transparent; }
+        [data-testid="stSidebar"] {
+            background: #101211;
+            border-right: 1px solid var(--line);
+        }
+        [data-testid="stSidebar"] .block-container { padding: 2rem 1.25rem; }
+        h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; letter-spacing: 0; }
+        h1 { font-size: clamp(2.2rem, 5vw, 4.6rem) !important; line-height: 0.98 !important; }
+        .brand-kicker {
+            color: var(--lime); font-size: 0.72rem; font-weight: 700;
+            letter-spacing: 0.16em; text-transform: uppercase; margin-bottom: 0.9rem;
+        }
+        .hero-copy { color: var(--muted); font-size: 1.05rem; max-width: 42rem; margin-bottom: 2rem; }
+        .hero-rule { border-top: 1px solid var(--line); margin: 1.5rem 0 2rem; }
+        .side-label { color: var(--muted); font-size: 0.72rem; letter-spacing: 0.13em; text-transform: uppercase; }
+        .side-title { color: var(--ink); font-family: 'Space Grotesk'; font-size: 1.4rem; font-weight: 700; margin: 0.3rem 0 2rem; }
+        .status-dot { color: var(--lime); font-size: 0.8rem; }
+        .tip-box { border: 1px solid var(--line); border-radius: 8px; padding: 0.9rem; color: var(--muted); font-size: 0.86rem; line-height: 1.5; }
+        [data-testid="stChatMessage"] {
+            background: rgba(23, 26, 25, 0.74);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 1.1rem 1.25rem;
+            margin: 0.7rem 0;
+        }
+        [data-testid="stChatInput"] {
+            border-color: rgba(215, 243, 106, 0.45);
+        }
+        .stButton > button {
+            border: 1px solid var(--line); border-radius: 6px; background: var(--panel);
+            color: var(--ink); text-align: left; transition: border-color 150ms ease, transform 150ms ease;
+        }
+        .stButton > button:hover { border-color: var(--lime); color: var(--lime); transform: translateY(-1px); }
+        [data-testid="stExpander"] { border: 1px solid var(--line); border-radius: 8px; background: rgba(23, 26, 25, 0.5); }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    with st.sidebar:
+        st.markdown('<div class="side-label">Groove & Gear</div>',
+                    unsafe_allow_html=True)
+        st.markdown('<div class="side-title">Your tone desk</div>',
+                    unsafe_allow_html=True)
+        st.markdown(
+            '<div class="status-dot">● Knowledge base online</div>', unsafe_allow_html=True)
+        st.divider()
+        st.markdown(
+            '<div class="side-label">ลองเริ่มจากคำถามนี้</div>', unsafe_allow_html=True)
+        starter_prompts = [
+            "ช่วยเลือกกีตาร์สำหรับมือใหม่",
+            "แอมป์ซ้อมที่เหมาะกับห้องนอน",
+            "เปรียบเทียบอุปกรณ์ในร้าน",
+        ]
+        for starter in starter_prompts:
+            if st.button(starter, use_container_width=True):
+                st.session_state.pending_prompt = starter
+        st.divider()
+        if st.button("ล้างบทสนทนา", use_container_width=True):
+            st.session_state.messages = []
+            st.rerun()
+        st.markdown(
+            '<div class="tip-box">ถามเรื่องสเปค การใช้งาน หรือช่วยจับคู่ gear ให้เข้ากับสไตล์ของคุณ</div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown('<div class="brand-kicker">Music gear intelligence / 24.7</div>',
+                unsafe_allow_html=True)
+    st.title("Find your sound.")
+    st.markdown(
+        '<div class="hero-copy">ผู้ช่วยเลือกเครื่องดนตรีที่คุยกับคุณรู้เรื่อง ค้นจากคลังข้อมูลของ Groove & Gear แล้วสรุปให้แบบสั้น กระชับ และเป็นภาษาไทย</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown('<div class="hero-rule"></div>', unsafe_allow_html=True)
 
     try:
         model, index, chunks = load_index()
@@ -141,25 +237,26 @@ def main():
         st.error(str(exc))
         st.stop()
 
-    # กำหนด Welcome Message
     if "messages" not in st.session_state:
         st.session_state.messages = [
-            {"role": "assistant", "content": "ยินดีต้อนรับสู่ **Groove & Gear**! 🤘\nถามสเปคเครื่องดนตรี ปรึกษาเรื่องแอมป์ หรือให้เราป้ายยาอุปกรณ์เด็ดๆ พิมพ์มาได้เลยครับ!"}
+            {"role": "assistant", "content": "ยินดีต้อนรับสู่ **Groove & Gear**!\n\nถามสเปคเครื่องดนตรี ปรึกษาเรื่องแอมป์ หรือให้ช่วยจับคู่ gear กับสไตล์ของคุณได้เลยครับ 🎸"}
         ]
 
-    # ใส่ Avatar ให้ข้อความแชต
     for msg in st.session_state.messages:
-        avatar = "🎧" if msg["role"] == "assistant" else "🧑‍🎤"
+        avatar = "GG" if msg["role"] == "assistant" else "YOU"
         with st.chat_message(msg["role"], avatar=avatar):
             st.write(msg["content"])
 
-    # เปลี่ยนข้อความในช่องพิมพ์
-    if prompt := st.chat_input("มีอะไรให้ Groove & Gear ช่วยแนะนำไหมครับ?"):
+    prompt = st.chat_input("มีอะไรให้ Groove & Gear ช่วยแนะนำไหมครับ?")
+    if not prompt and st.session_state.get("pending_prompt"):
+        prompt = st.session_state.pop("pending_prompt")
+
+    if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user", avatar="🧑‍🎤"):
+        with st.chat_message("user", avatar="YOU"):
             st.write(prompt)
 
-        with st.chat_message("assistant", avatar="🎧"):
+        with st.chat_message("assistant", avatar="GG"):
             with st.spinner("กำลังค้นข้อมูล..."):
                 context = retrieve_top_k(prompt, model, index, chunks, k=3)
                 answer = generate_answer(prompt, context)

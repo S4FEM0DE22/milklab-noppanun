@@ -163,6 +163,25 @@ def generate_answer(query: str, context_chunks: list[str]) -> str:
     return answer
 
 
+def scroll_to_latest_message():
+    """เลื่อนไปท้ายหน้าหลังจาก Streamlit วาดแชตเสร็จ."""
+
+    components.html(
+        """
+        <script>
+        window.setTimeout(() => {
+            const documentElement = window.parent.document.documentElement;
+            const body = window.parent.document.body;
+            const bottom = Math.max(documentElement.scrollHeight, body.scrollHeight);
+            window.parent.scrollTo({ top: bottom, behavior: 'smooth' });
+        }, 100);
+        </script>
+        """,
+        height=0,
+        scrolling=False,
+    )
+
+
 def main():
     st.set_page_config(
         page_title="Groove & Gear",
@@ -759,6 +778,7 @@ def main():
                     st.markdown(f"**[{i}]** {c}")
         st.session_state.messages.append(
             {"role": "assistant", "content": answer})
+        scroll_to_latest_message()
 
 
 if __name__ == "__main__":

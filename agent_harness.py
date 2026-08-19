@@ -1,368 +1,178 @@
-"""MilkLab Agent Harness (S2).
+"""Groove & Gear Agent Harness (S3 Pivot).
 
-Usage:
-    python agent_harness.py --cmd "บันทึกขายนมหมี 2 ขวด ขวดละ 65"
-
-รับคำสั่งภาษาไทย ส่งให้ Gemini พร้อม tool schema
-parse response เป็น tool call เรียก tool จริง
-และบันทึก trace ลง agent_trace.log
+จัดการระบบ Agent และ Function Calling (Tools) สำหรับร้านเครื่องดนตรี
 """
 
-import argparse
 import json
 import os
 import sys
-from datetime import datetime
-from typing import Any
-from zoneinfo import ZoneInfo
+from google import genai
+from google.genai import types
 
-from dotenv import load_dotenv
-
-try:
-    from google import genai
-except ImportError:  # pragma: no cover
-    genai = None
-
-import sales_logger
+# ---------------------------------------------------------------------------
+# 1. นิยามฟังก์ชันการทำงานของ Tools (Mock functions)
+# ---------------------------------------------------------------------------
 
 
-TRACE_FILE = "agent_trace.log"
+def check_amp_compatibility(instrument_type: str, amp_type: str) -> str:
+    """เช็กความเข้ากันได้ของเครื่องดนตรีและแอมป์"""
+    ins = instrument_type.lower()
+    amp = amp_type.lower()
 
-TOOL_SCHEMA = [
-    {
-        "name": "log_sale",
-        "description": "บันทึกการขายลง Google Sheets และส่ง notification",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "menu": {
-                    "type": "string",
-                    "description": "ชื่อเมนูหรือสินค้า",
-                },
-                "qty": {
-                    "type": "integer",
-                    "description": "จำนวนที่ขาย ต้องมากกว่า 0",
-                },
-                "price": {
-                    "type": "number",
-                    "description": "ราคาต่อหน่วย ต้องไม่ติดลบ",
-                },
+    if "เบส" in ins or "bass" in ins:
+        if "กีตาร์" in amp or "guitar" in amp:
+            return "อันตราย: การใช้เบสกับแอมป์กีตาร์อาจทำให้ดอกลำโพงแตกได้ เนื่องจากแอมป์กีตาร์ไม่ได้ออกแบบมาให้รับความถี่ต่ำและแรงกระแทกจากเบส แนะนำให้ใช้แอมป์เบสโดยเฉพาะครับ"
+
+    if "กีตาร์" in ins or "guitar" in ins:
+        if "เบส" in amp or "bass" in amp:
+            return "ปลอดภัย: สามารถใช้กีตาร์เล่นกับแอมป์เบสได้ ลำโพงไม่พัง แต่โทนเสียงที่ได้อาจจะทุ้มและขาดความใส (High-end) ไปบ้างครับ"
+
+    return f"โดยทั่วไปสามารถใช้งานร่วมกันได้ แต่แนะนำให้ใช้อุปกรณ์ที่ออกแบบมาเฉพาะทางจะได้เสียงที่ดีที่สุดครับ"
+
+
+def recommend_starter_gear(instrument_category: str, budget: int) -> str:
+    """แนะนำสินค้าเบื้องต้นตามประเภทและงบประมาณ"""
+    cat = instrument_category.lower()
+    if "คีย์บอร์ด" in cat or "keyboard" in cat:
+        if budget < 5000:
+            return "ในงบนี้ แนะนำเป็น 'คีย์บอร์ดไฟฟ้า 61 คีย์' (ราคา 4,900 บาท) พกพาง่าย มีจังหวะในตัวครับ"
+        else:
+            return "ถ้างบถึง แนะนำ 'เปียโนไฟฟ้า 88 คีย์' (ราคา 12,500 บาท) ทัชชิ่งเหมือนจริง ซ้อมได้ยาวๆ ครับ"
+
+    elif "กีตาร์" in cat or "guitar" in cat:
+        return "แนะนำ 'กีตาร์โปร่ง ทรง Dreadnought' (ราคา 3,500 บาท) เสียงกังวาน เล่นง่าย เหมาะกับมือใหม่สุดๆ ครับ"
+
+    return f"สำหรับ {instrument_category} ในงบ {budget} บาท ทักแอดมินมาเพื่อรับคำแนะนำเชิงลึกได้เลยครับ!"
+
+
+def log_order(order_message: str) -> str:
+    """เรียกใช้ระบบบันทึกออเดอร์ (เชื่อมกับ sales_logger)"""
+    # ในการใช้งานจริง คุณสามารถ import extract_order_info และ log_to_sheet จาก sales_logger.py มาใช้ได้เลย
+    return f"ระบบได้รับออเดอร์แล้ว: ระบบเตรียมแพ็คสินค้าและจะสรุปยอดให้ในแชตครับ (บันทึกออเดอร์สำเร็จ)"
+
+
+# ---------------------------------------------------------------------------
+# 2. กำหนด TOOL SCHEMA สำหรับ Gemini
+# ---------------------------------------------------------------------------
+
+music_tools = [
+    types.FunctionDeclaration(
+        name="check_amp_compatibility",
+        description="ตรวจสอบความเข้ากันได้และความปลอดภัย เมื่อลูกค้าถามว่าเอาเครื่องดนตรีประเภทหนึ่งไปเสียบเล่นกับแอมป์อีกประเภทหนึ่งได้หรือไม่",
+        parameters=types.Schema(
+            type=types.Type.OBJECT,
+            properties={
+                "instrument_type": types.Schema(type=types.Type.STRING, description="ประเภทเครื่องดนตรีที่ลูกค้าจะเล่น เช่น กีตาร์, เบส, คีย์บอร์ด"),
+                "amp_type": types.Schema(type=types.Type.STRING, description="ประเภทแอมป์ที่ลูกค้าจะนำไปเสียบ เช่น แอมป์กีตาร์, แอมป์เบส"),
             },
-            "required": ["menu", "qty", "price"],
-        },
-    },
-    {
-        "name": "query_sales",
-        "description": "ดูยอดขายรวมของวันที่ระบุ",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "date": {
-                    "type": "string",
-                    "description": "วันที่รูปแบบ YYYY-MM-DD",
-                },
+            required=["instrument_type", "amp_type"]
+        )
+    ),
+    types.FunctionDeclaration(
+        name="recommend_starter_gear",
+        description="แนะนำสินค้ารุ่นเริ่มต้น เมื่อลูกค้าถามหาเครื่องดนตรีและบอกงบประมาณ",
+        parameters=types.Schema(
+            type=types.Type.OBJECT,
+            properties={
+                "instrument_category": types.Schema(type=types.Type.STRING, description="หมวดหมู่เครื่องดนตรี เช่น กีตาร์, คีย์บอร์ด, กลอง"),
+                "budget": types.Schema(type=types.Type.INTEGER, description="งบประมาณที่ลูกค้ามี (ใส่ตัวเลขเท่านั้น หากไม่ระบุให้ใส่ 0)"),
             },
-            "required": ["date"],
-        },
-    },
-    {
-        "name": "send_alert",
-        "description": "ส่งข้อความแจ้งเตือนผ่าน Bot",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "message": {
-                    "type": "string",
-                    "description": "ข้อความที่ต้องการส่ง",
-                },
+            required=["instrument_category", "budget"]
+        )
+    ),
+    types.FunctionDeclaration(
+        name="log_order",
+        description="ใช้บันทึกคำสั่งซื้อ เมื่อลูกค้าตกลงซื้อสินค้าหรือสั่งซื้อสินค้า",
+        parameters=types.Schema(
+            type=types.Type.OBJECT,
+            properties={
+                "order_message": types.Schema(type=types.Type.STRING, description="ข้อความแชตทั้งหมดของลูกค้าที่บอกว่าสั่งอะไร ส่งที่ไหน"),
             },
-            "required": ["message"],
-        },
-    },
+            required=["order_message"]
+        )
+    )
 ]
 
+# ดึงฟังก์ชันมาไว้ใน Dictionary เพื่อให้เรียกใช้ง่ายๆ เมื่อ LLM คืนค่าชื่อฟังก์ชันมา
+TOOL_FUNCTIONS = {
+    "check_amp_compatibility": check_amp_compatibility,
+    "recommend_starter_gear": recommend_starter_gear,
+    "log_order": log_order
+}
 
-def write_trace(event_type: str, content: str) -> None:
-    """Append one trace record to agent_trace.log."""
-    timestamp = datetime.now(
-        ZoneInfo("Asia/Bangkok")
-    ).strftime("%Y-%m-%d %H:%M:%S")
+# ---------------------------------------------------------------------------
+# 3. Agent Harness Logic
+# ---------------------------------------------------------------------------
 
-    with open(TRACE_FILE, "a", encoding="utf-8") as file:
-        file.write(f"{timestamp} | {event_type} | {content}\n")
+SYSTEM_INSTRUCTION = """
+คุณคือแอดมินร้าน "Groove & Gear" (ร้านขายเครื่องดนตรีและอุปกรณ์ครบวงจร)
+บุคลิก: เป็นกันเอง คุยสนุก เป็นนักดนตรีตัวจริงที่พร้อมป้ายยาอุปกรณ์ให้ลูกค้า
+หน้าที่:
+1. ตอบคำถามเรื่องเครื่องดนตรี
+2. หากลูกค้าถามเรื่องความปลอดภัย/การเสียบแอมป์ข้ามประเภท ให้เรียกใช้เครื่องมือ `check_amp_compatibility`
+3. หากลูกค้าให้งบประมาณมาและให้แนะนำสินค้า ให้เรียกใช้เครื่องมือ `recommend_starter_gear`
+4. หากลูกค้าสั่งซื้อสินค้า ให้เรียกใช้เครื่องมือ `log_order`
+"""
 
 
-def parse_command(cmd: str, api_key: str | None = None) -> dict[str, Any]:
-    """Send a Thai command to Gemini and request a strict JSON tool call."""
-    key = api_key or os.getenv("GOOGLE_API_KEY", "").strip()
-
+def chat_with_agent(user_message: str, api_key: str | None = None):
+    key = api_key or os.environ.get("GOOGLE_API_KEY")
     if not key:
-        raise RuntimeError("GOOGLE_API_KEY not set in env or argument")
-
-    if genai is None or not hasattr(genai, "Client"):
-        raise RuntimeError(
-            "google.genai is not available; install package google-genai"
-        )
+        raise RuntimeError("GOOGLE_API_KEY not set")
 
     client = genai.Client(api_key=key)
-    tool_schema_json = json.dumps(TOOL_SCHEMA, ensure_ascii=False)
 
-    prompt = f"""
-คุณคือตัวช่วยจัดการยอดขายของ MilkLab
+    # สร้าง Tools object
+    agent_tools = types.Tool(function_declarations=music_tools)
 
-ผู้ใช้จะส่งคำสั่งภาษาไทย ให้เลือกใช้ tool เพียงหนึ่งตัวจาก schema นี้:
+    print(f"User: {user_message}")
 
-{tool_schema_json}
-
-กฎ:
-- ตอบเฉพาะ JSON เท่านั้น
-- ห้ามใส่ Markdown หรือคำอธิบายเพิ่มเติม
-- รูปแบบคำตอบต้องเป็น:
-  {{"tool": "ชื่อ tool", "args": {{...}}}}
-- คำสั่งบันทึกยอดขายให้ใช้ log_sale
-- คำสั่งดูยอดขายให้ใช้ query_sales
-- คำสั่งแจ้งเตือนให้ใช้ send_alert
-- ห้ามแก้จำนวนติดลบให้เป็นจำนวนบวก
-- ห้ามแต่งข้อมูลที่ผู้ใช้ไม่ได้ระบุ
-- วันที่ต้องอยู่ในรูปแบบ YYYY-MM-DD
-
-คำสั่งของผู้ใช้:
-{cmd}
-""".strip()
-
+    # ส่งข้อความไปหา Gemini พร้อม Tools
     response = client.models.generate_content(
-        model="gemini-2.5-pro",
-        contents=prompt,
+        model="gemini-2.5-flash",
+        contents=user_message,
+        config=types.GenerateContentConfig(
+            system_instruction=SYSTEM_INSTRUCTION,
+            tools=[agent_tools]
+        )
     )
 
-    text = (getattr(response, "text", None) or "").strip()
-
-    if text.startswith("```"):
-        lines = text.splitlines()
-
-        if lines and lines[0].startswith("```"):
-            lines = lines[1:]
-
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-
-        text = "\n".join(lines).strip()
-
-        if text.lower().startswith("json"):
-            text = text[4:].strip()
-
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(
-            f"Gemini did not return valid JSON: {text}"
-        ) from exc
-
-    if not isinstance(parsed, dict):
-        raise RuntimeError("Gemini response must be a JSON object")
-
-    if "tool" not in parsed or "args" not in parsed:
-        raise RuntimeError("Gemini response was not a valid tool call")
-
-    tool_name = parsed["tool"]
-    args = parsed["args"]
-
-    if not isinstance(tool_name, str):
-        raise RuntimeError("Tool name must be a string")
-
-    if not isinstance(args, dict):
-        raise RuntimeError("Tool args must be an object")
-
-    return {
-        "tool": tool_name,
-        "args": args,
-    }
-
-
-def validate_tool_call(tool_call: dict[str, Any]) -> None:
-    """Validate all arguments before executing a tool."""
-    tool_name = tool_call.get("tool")
-    args = tool_call.get("args", {})
-
-    allowed_tools = {
-        "log_sale",
-        "query_sales",
-        "send_alert",
-    }
-
-    if tool_name not in allowed_tools:
-        raise ValueError(f"unsupported tool: {tool_name}")
-
-    if not isinstance(args, dict):
-        raise ValueError("tool args must be an object")
-
-    if tool_name == "log_sale":
-        menu = str(args.get("menu", "")).strip()
-
-        try:
-            qty = int(args.get("qty"))
-        except (TypeError, ValueError) as exc:
-            raise ValueError("quantity must be an integer") from exc
-
-        try:
-            price = float(args.get("price"))
-        except (TypeError, ValueError) as exc:
-            raise ValueError("price must be a number") from exc
-
-        if not menu:
-            raise ValueError("menu must not be empty")
-
-        if qty <= 0:
-            raise ValueError("quantity must be positive")
-
-        if price < 0:
-            raise ValueError("price must not be negative")
-
-        # เก็บค่าที่แปลงชนิดข้อมูลแล้วกลับเข้า args
-        args["menu"] = menu
-        args["qty"] = qty
-        args["price"] = price
-
-    elif tool_name == "query_sales":
-        date = str(args.get("date", "")).strip()
-
-        if not date:
-            raise ValueError("date must not be empty")
-
-        try:
-            datetime.strptime(date, "%Y-%m-%d")
-        except ValueError as exc:
-            raise ValueError("date must use YYYY-MM-DD format") from exc
-
-        args["date"] = date
-
-    elif tool_name == "send_alert":
-        message = str(args.get("message", "")).strip()
-
-        if not message:
-            raise ValueError("message must not be empty")
-
-        if len(message) > 1000:
-            raise ValueError("message is too long")
-
-        args["message"] = message
-
-
-def dispatch_tool(tool_call: dict[str, Any]) -> str:
-    """Execute a validated tool call and return a readable summary."""
-    tool_name = tool_call["tool"]
-    args = tool_call["args"]
-
-    if tool_name == "log_sale":
-        menu = args["menu"]
-        qty = args["qty"]
-        price = args["price"]
-
-        row = sales_logger.append_to_sheet(
-            menu=menu,
-            qty=qty,
-            price=price,
-        )
-
-        provider = sales_logger.send_notification(
-            f"บันทึก {menu} x{qty} = {row['total']} บาท"
-        )
-
-        return (
-            f"log_sale OK: row appended at {row['timestamp']} "
-            f"via {provider}; total={row['total']} บาท"
-        )
-
-    if tool_name == "query_sales":
-        date = args["date"]
-        total = sales_logger.query_sales(date)
-
-        return f"query_sales OK: ยอดขายวันที่ {date} = {total} บาท"
-
-    if tool_name == "send_alert":
-        message = args["message"]
-        provider = sales_logger.send_notification(message)
-
-        return f"send_alert OK: alert sent via {provider}"
-
-    raise RuntimeError(f"Unsupported tool: {tool_name}")
-
-
-def build_user_response(
-    tool_call: dict[str, Any],
-    tool_result: str,
-) -> str:
-    """Create a readable final response for the user."""
-    tool_name = tool_call["tool"]
-    args = tool_call["args"]
-
-    if tool_name == "log_sale":
-        total = args["qty"] * args["price"]
-        return f"บันทึกแล้ว ยอดรวม {total:g} บาท"
-
-    if tool_name == "query_sales":
-        return tool_result.replace("query_sales OK: ", "", 1)
-
-    if tool_name == "send_alert":
-        return "ส่งข้อความแจ้งเตือนเรียบร้อยแล้ว"
-
-    return tool_result
-
-
-def main() -> int:
-    load_dotenv()
-
-    parser = argparse.ArgumentParser(
-        description="MilkLab Agent Harness"
-    )
-    parser.add_argument(
-        "--cmd",
-        required=True,
-        help="คำสั่งภาษาไทย",
-    )
-    args = parser.parse_args()
-
-    command = args.cmd.strip()
-
-    print(f"[USER] {command}")
-    write_trace("user_input", command)
-
-    try:
-        tool_call = parse_command(command)
-
-        tool_call_json = json.dumps(
-            tool_call,
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
-
-        print(
-            f"[LLM] tool={tool_call['tool']} "
-            f"args={tool_call['args']}"
-        )
-        write_trace("llm_response", tool_call_json)
-
-        # Guardrail ต้องทำก่อน dispatch_tool เสมอ
-        validate_tool_call(tool_call)
-
-        result = dispatch_tool(tool_call)
-
-        print(f"[TOOL] {result}")
-        write_trace("tool_result", result)
-
-        user_response = build_user_response(tool_call, result)
-        print(f"[USER] ← {user_response}")
-
-        return 0
-
-    except Exception as exc:
-        error_message = f"{type(exc).__name__}: {exc}"
-
-        print(f"[ERROR] {error_message}", file=sys.stderr)
-        write_trace("tool_result", error_message)
-
-        return 1
+    # ตรวจสอบว่า Gemini ต้องการเรียกใช้ Tool (Function Calling) หรือไม่
+    if response.function_calls:
+        for function_call in response.function_calls:
+            func_name = function_call.name
+            args = {k: v for k, v in function_call.args.items()}
+
+            print(
+                f"\n[Agent คิด...] กำลังเรียกใช้ Tool: {func_name} ด้วยข้อมูล {args}")
+
+            if func_name in TOOL_FUNCTIONS:
+                # เรียกใช้ฟังก์ชัน Python ที่เราเตรียมไว้
+                tool_result = TOOL_FUNCTIONS[func_name](**args)
+                print(f"[ผลลัพธ์จาก Tool]: {tool_result}")
+
+                # ส่งผลลัพธ์กลับไปให้ Gemini เพื่อสร้างข้อความตอบกลับลูกค้า
+                final_response = client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=[
+                        user_message,
+                        response.candidates[0].content,
+                        types.Part.from_function_response(
+                            name=func_name,
+                            response={"result": tool_result}
+                        )
+                    ],
+                    config=types.GenerateContentConfig(
+                        system_instruction=SYSTEM_INSTRUCTION)
+                )
+                print(f"\nGroove & Gear Admin: {final_response.text}")
+    else:
+        # ตอบกลับปกติโดยไม่ใช้ Tool
+        print(f"\nGroove & Gear Admin: {response.text}")
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    load_dotenv()
+    # ลองเทสด้วยคำถามที่บอตต้องใช้ Tool
+    test_msg = "พี่ครับ ผมเอาเบสไปเสียบเล่นกับแอมป์กีตาร์ของที่บ้านได้มั้ยครับ?"
+    chat_with_agent(test_msg)

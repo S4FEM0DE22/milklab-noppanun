@@ -177,25 +177,6 @@ def scroll_to_latest_message():
             const latestMessage = messages[messages.length - 1];
             if (latestMessage) {
                 latestMessage.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-                window.setTimeout(() => {
-                    const composer = document.querySelector('[data-testid="stForm"]');
-                    const messageBottom = latestMessage.getBoundingClientRect().bottom;
-                    const safeBottom = composer
-                        ? composer.getBoundingClientRect().top - 16
-                        : window.innerHeight - 16;
-                    const overlap = messageBottom - safeBottom;
-                    if (overlap > 0) {
-                        const scrollContainer = document.querySelector(
-                            '[data-testid="stAppScrollToBottomContainer"]'
-                        );
-                        if (scrollContainer) {
-                            scrollContainer.scrollBy({ top: overlap, behavior: 'smooth' });
-                        } else {
-                            window.parent.scrollBy({ top: overlap, behavior: 'smooth' });
-                        }
-                    }
-                }, 350);
             }
         }, 300);
         </script>
@@ -212,6 +193,27 @@ def main():
         layout="wide",
         initial_sidebar_state="expanded",
     )
+
+    # ดึงหน้าจอกลับขึ้นด้านบนเมื่อผู้ใช้เปิดเว็บครั้งแรก (แก้ปัญหา st.chat_input ลากจอลงไปข้างล่าง)
+    if "first_visit" not in st.session_state:
+        st.session_state.first_visit = False
+        components.html(
+            """
+            <script>
+            window.parent.setTimeout(() => {
+                const scrollContainer = window.parent.document.querySelector('[data-testid="stAppScrollToBottomContainer"]') || window.parent.document.querySelector('.main');
+                if (scrollContainer) {
+                    scrollContainer.scrollTo({ top: 0, behavior: 'instant' });
+                } else {
+                    window.parent.scrollTo({ top: 0, behavior: 'instant' });
+                }
+            }, 150);
+            </script>
+            """,
+            height=0,
+            scrolling=False
+        )
+
     st.markdown(
         """
         <style>
@@ -294,19 +296,6 @@ def main():
         .tip-box { border: 1px solid var(--line); border-radius: 8px; padding: 0.9rem; color: var(--muted); font-size: 0.86rem; line-height: 1.5; }
         .location-box { border-left: 2px solid var(--orange); padding-left: 0.75rem; color: var(--ink); font-size: 0.82rem; line-height: 1.45; }
         .location-box span { display: block; color: var(--muted); font-size: 0.7rem; letter-spacing: 0.08em; margin-bottom: 0.25rem; text-transform: uppercase; }
-        .radio-card { background: linear-gradient(135deg, rgba(215, 243, 106, 0.1), rgba(255, 138, 91, 0.06)); border: 1px solid rgba(215, 243, 106, 0.28); border-radius: 8px; padding: 0.9rem; }
-        .radio-head { align-items: center; display: flex; gap: 0.6rem; margin-bottom: 0.65rem; }
-        .radio-mark { align-items: center; background: var(--lime); border-radius: 50%; color: #111312; display: flex; font-size: 0.7rem; height: 1.55rem; justify-content: center; width: 1.55rem; }
-        .radio-name { color: var(--ink); font-family: 'Space Grotesk'; font-size: 0.95rem; font-weight: 700; }
-        .radio-status { color: var(--orange); font-size: 0.62rem; letter-spacing: 0.1em; margin-left: auto; text-transform: uppercase; }
-        .radio-bars { align-items: center; display: flex; gap: 3px; height: 1rem; margin-bottom: 0.55rem; }
-        .radio-bars i { animation: bar-pulse 820ms ease-in-out infinite; background: var(--lime); border-radius: 2px; display: block; height: 0.8rem; width: 3px; }
-        .radio-bars i:nth-child(2) { animation-delay: 120ms; height: 0.55rem; }
-        .radio-bars i:nth-child(3) { animation-delay: 240ms; height: 1rem; }
-        .radio-bars i:nth-child(4) { animation-delay: 360ms; height: 0.4rem; }
-        .radio-bars i:nth-child(5) { animation-delay: 480ms; height: 0.7rem; }
-        .radio-source { color: var(--muted); font-size: 0.68rem; letter-spacing: 0.08em; margin-bottom: 0.35rem; text-transform: uppercase; }
-        .radio-player { background: rgba(12, 14, 13, 0.72); border: 1px solid var(--line); border-radius: 6px; display: block; height: 2.3rem; margin-top: 0.55rem; width: 100%; }
         .highlight-list { color: var(--muted); font-size: 0.82rem; line-height: 1.65; }
         .highlight-list strong { color: var(--ink); }
         .section-label { color: var(--orange); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; margin: 0.5rem 0 0.6rem; }
@@ -325,93 +314,6 @@ def main():
             border-radius: 8px;
             box-shadow: 0 0 0 1px rgba(215, 243, 106, 0.05);
         }
-        [data-testid="stForm"] {
-            background: linear-gradient(135deg, #252631 0%, #292a36 100%);
-            border: 1px solid rgba(244, 241, 232, 0.1);
-            border-radius: 9px;
-            bottom: 2rem;
-            align-self: flex-start !important;
-            box-sizing: border-box;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
-            height: 58px !important;
-            left: calc(max(1rem, calc(21rem + 2vw)) + 4.75rem);
-            max-width: none !important;
-            min-height: 58px !important;
-            padding: 0.35rem 0.55rem;
-            position: fixed;
-            right: calc(2rem + 58px);
-            z-index: 1000;
-            width: auto !important;
-        }
-        [data-testid="stForm"]:focus-within {
-            border-color: rgba(215, 243, 106, 0.5);
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28), 0 0 0 3px rgba(215, 243, 106, 0.08);
-        }
-        [data-testid="stForm"] [data-testid="stVerticalBlock"] {
-            align-items: center;
-            gap: 0;
-            min-height: 0 !important;
-            width: 100% !important;
-        }
-        [data-testid="stForm"] [data-testid="stHorizontalBlock"] {
-            align-items: center;
-            gap: 0.5rem;
-        }
-        [data-testid="stForm"] [data-testid="stTextInput"] {
-            margin: 0;
-            width: calc(100% + 1.25rem) !important;
-        }
-        [data-testid="stForm"] [data-testid="stTextInput"] > div {
-            min-height: 0;
-        }
-        [data-testid="stForm"] [data-testid="stTextInput"] input {
-            background: transparent;
-            border: 0;
-            color: var(--ink);
-            font-size: 0.86rem;
-            height: 42px;
-            padding: 0 0.65rem;
-        }
-        [data-testid="stForm"] [data-testid="stTextInput"] input::placeholder {
-            color: #b9bac4;
-            opacity: 0.9;
-        }
-        [data-testid="stForm"] [data-testid="stTextInput"] input:focus {
-            border: 0;
-            box-shadow: none;
-        }
-        [data-testid="stForm"] small {
-            display: none;
-        }
-        [data-testid="stForm"] [data-testid="stFormSubmitButton"] button {
-            background: #3b3c48;
-            border: 0;
-            border-radius: 9px;
-            color: #aeb0bb;
-            font-size: 1.25rem;
-            font-weight: 700;
-            height: 42px;
-            min-height: 42px;
-            padding: 0;
-            text-align: center;
-            transition: background 160ms ease, color 160ms ease, transform 160ms ease;
-            width: 42px;
-        }
-        [data-testid="stForm"] [data-testid="stFormSubmitButton"] {
-            display: flex;
-            justify-content: flex-end;
-        }
-        [data-testid="stForm"] [data-testid="stFormSubmitButton"] button:hover {
-            background: var(--lime);
-            color: #101211;
-            transform: translateY(-1px);
-        }
-        [data-testid="stForm"] [data-testid="stFormSubmitButton"] button:active { transform: translateY(0); }
-        body:has([data-testid="stSidebar"][aria-expanded="false"]) [data-testid="stForm"] {
-            left: calc(4vw + 1.7rem);
-            right: calc(4vw + 2.25rem);
-            width: auto !important;
-        }
         .stButton > button {
             border: 1px solid var(--line); border-radius: 6px; background: var(--panel);
             color: var(--ink); text-align: left; transition: border-color 150ms ease, transform 150ms ease;
@@ -419,27 +321,13 @@ def main():
         .stButton > button:hover { border-color: var(--lime); color: var(--lime); transform: translateY(-1px); }
         .stButton > button:focus-visible { border-color: var(--lime); box-shadow: 0 0 0 2px rgba(215, 243, 106, 0.2); }
         [data-testid="stExpander"] { border: 1px solid var(--line); border-radius: 8px; background: rgba(23, 26, 25, 0.5); }
-        @media (max-width: 900px) {
-            [data-testid="stForm"] {
-                left: 1rem;
-                right: 1rem;
-                width: auto !important;
-            }
-            [data-testid="stForm"] [data-testid="stTextInput"] { width: 100% !important; }
-        }
+        
         @media (max-width: 640px) {
             .service-strip { grid-template-columns: 1fr; }
             .service-item { border-bottom: 1px solid var(--line); border-right: 0; }
             .service-item:last-child { border-bottom: 0; }
             .hero-copy { font-size: 0.95rem; }
             [data-testid="stChatMessage"] { padding: 0.9rem; }
-            [data-testid="stForm"] {
-                bottom: 1.25rem;
-                left: 0.75rem;
-                right: 0.75rem;
-                width: calc(100vw - 1.5rem) !important;
-            }
-            [data-testid="stForm"] [data-testid="stHorizontalBlock"] { gap: 0.25rem; }
         }
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
@@ -754,7 +642,7 @@ def main():
                             </div>
                             <div class="live">ON AIR</div>
                         </div>
-                        <div class="bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                        <div class="bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
                         <audio id="audio" loop preload="auto" src="{audio_source}"></audio>
                         <div class="timeline"><span id="current">00:00</span><input id="progress" type="range" min="0" max="100" value="0" aria-label="ความคืบหน้าเพลง"><span id="duration">00:00</span></div>
                         <div class="controls">
@@ -879,27 +767,19 @@ def main():
             {"role": "assistant", "content": "ยินดีต้อนรับสู่ **Groove & Gear**!\n\nถามสเปคเครื่องดนตรี ปรึกษาเรื่องแอมป์ หรือให้ช่วยจับคู่ gear กับสไตล์ของคุณได้เลยครับ 🎸"}
         ]
 
-    prompt = None
-    with st.form("chat_form", clear_on_submit=True):
-        input_column, submit_column = st.columns([1, 0.08], gap="small")
-        with input_column:
-            typed_prompt = st.text_input(
-                "คำถาม",
-                placeholder="มีอะไรให้ Groove & Gear ช่วยแนะนำไหมครับ?",
-                label_visibility="collapsed",
-            )
-        with submit_column:
-            submitted = st.form_submit_button("↑", use_container_width=True)
-    if submitted:
-        prompt = typed_prompt.strip()
+    # ------ ส่วนรับข้อมูลแชทแบบใหม่ (ใช้ st.chat_input) ------
+    prompt = st.chat_input("มีอะไรให้ Groove & Gear ช่วยแนะนำไหมครับ?")
+
     if not prompt and st.session_state.get("pending_prompt"):
         prompt = st.session_state.pop("pending_prompt")
 
+    # ------ วาดข้อความแชทเดิมที่มีอยู่ ------
     for msg in st.session_state.messages:
         avatar = "🎧" if msg["role"] == "assistant" else "🧑‍🎤"
         with st.chat_message(msg["role"], avatar=avatar):
             st.write(msg["content"])
 
+    # ------ ประมวลผลคำถามใหม่ ------
     if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user", avatar="🧑‍🎤"):
@@ -915,6 +795,7 @@ def main():
                     f"พบข้อมูลอ้างอิง {len(context)} ส่วนจาก Knowledge Base")
                 for i, c in enumerate(context, 1):
                     st.markdown(f"**[{i}]** {c}")
+
         st.session_state.messages.append(
             {"role": "assistant", "content": answer})
         scroll_to_latest_message()

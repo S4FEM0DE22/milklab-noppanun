@@ -1,9 +1,9 @@
-"""MilkLab Caption Generator (S1).
+"""Groove & Gear Caption Generator (S1 Pivot).
 
 Usage:
-    python caption_generator.py --menu "นมหมีฮอกไกโด" --n 3
+    python caption_generator.py --item "แอมป์เบสฝึกซ้อม 15W" --n 3
 
-Reads GOOGLE_API_KEY from env. Generates Thai captions for milk menu items.
+Reads GOOGLE_API_KEY from env. Generates Thai captions for music gear items.
 """
 
 import argparse
@@ -17,32 +17,32 @@ from google import genai
 
 
 PROMPT_TEMPLATE = """\
-คุณคือ social media manager ของร้าน MilkLab° ร้านนมสดกลางคืน
+คุณคือ social media manager ของร้าน "Groove & Gear" ร้านขายเครื่องดนตรีและอุปกรณ์ครบวงจร
 
-ข้อมูลเมนู:
-{menu_context}
+ข้อมูลสินค้า:
+{item_context}
 
-จงเขียนแคปชั่นภาษาไทย 2 ถึง 3 ประโยคเพื่อโปรโมตเมนูนี้ โดยเป็นสไตล์ {style}
+จงเขียนแคปชั่นภาษาไทย 2 ถึง 3 ประโยคเพื่อโปรโมตสินค้านี้ โดยเป็นสไตล์ {style}
 
 เงื่อนไข:
-- โทนสนุก ใช้คำง่าย ใส่ emoji ได้
-- ต้องมี call-to-action ปิดท้าย เช่น สั่งเลย หรือ ทักแชท
+- โทนเป็นกันเอง เข้าใจหัวอกคนเล่นดนตรี ใช้คำง่าย ใส่ emoji เครื่องดนตรีได้
+- ต้องมี call-to-action ปิดท้าย เช่น สั่งซื้อเลย, ทักแชท, หรือ เข้ามาลองเทสเสียง
 - ห้ามใช้ em dash
 - คำแคปชั่นต้องไม่เกิน 280 ตัวอักษร
-- ถ้าเป็นสไตล์ cute ให้หวานและน่ารัก
-- ถ้าเป็นสไตล์ minimal ให้สั้นและเรียบง่าย
-- ถ้าเป็นสไตล์ gen-z ให้เท่และคูลแบบเท่ๆ
+- ถ้าเป็นสไตล์ cute ให้ดูเป็นมิตร เข้าถึงง่าย และต้อนรับมือใหม่
+- ถ้าเป็นสไตล์ minimal ให้สั้น กระชับ โฟกัสที่สเปคและดูเป็นมืออาชีพ
+- ถ้าเป็นสไตล์ gen-z ให้เท่ คูล กวนๆ แบบวัยรุ่นทำเพลง
 """
 
 
-def _parse_menu_input(menu: str | dict[str, Any] | None) -> str | dict[str, Any]:
-    """Parse CLI menu input, allowing either plain text or JSON objects."""
-    if menu is None:
+def _parse_item_input(item: str | dict[str, Any] | None) -> str | dict[str, Any]:
+    """Parse CLI item input, allowing either plain text or JSON objects."""
+    if item is None:
         return ""
-    if isinstance(menu, dict):
-        return menu
-    if isinstance(menu, str):
-        text = menu.strip()
+    if isinstance(item, dict):
+        return item
+    if isinstance(item, str):
+        text = item.strip()
         if not text:
             return ""
         if text.startswith("{") or text.startswith("["):
@@ -51,56 +51,58 @@ def _parse_menu_input(menu: str | dict[str, Any] | None) -> str | dict[str, Any]
             except json.JSONDecodeError:
                 return text
         return text
-    return menu
+    return item
 
 
-def _build_menu_context(menu: str | dict[str, Any] | None) -> str:
-    """Create a compact menu context block for the prompt."""
-    parsed_menu = _parse_menu_input(menu)
-    if isinstance(parsed_menu, dict):
-        menu_data = parsed_menu.get("menu", parsed_menu)
-        if not isinstance(menu_data, dict):
-            return f"ชื่อเมนู: {parsed_menu}"
+def _build_item_context(item: str | dict[str, Any] | None) -> str:
+    """Create a compact item context block for the prompt."""
+    parsed_item = _parse_item_input(item)
+    if isinstance(parsed_item, dict):
+        # รองรับทั้งคีย์เก่า (menu) และคีย์ใหม่ (item) เผื่อระบบอื่นส่งมา
+        item_data = parsed_item.get(
+            "item", parsed_item.get("menu", parsed_item))
+        if not isinstance(item_data, dict):
+            return f"ชื่อสินค้า: {parsed_item}"
 
-        name = menu_data.get("name") or menu_data.get(
-            "title") or menu_data.get("menu")
-        price = menu_data.get("price")
-        ingredients = menu_data.get("ingredients", [])
-        if isinstance(ingredients, str):
-            ingredients = [ingredients]
+        name = item_data.get("name") or item_data.get(
+            "title") or item_data.get("item")
+        price = item_data.get("price")
+        # เปลี่ยนจาก ingredients เป็น features หรือ desc สำหรับเครื่องดนตรี
+        features = item_data.get("features", item_data.get("desc", []))
+        if isinstance(features, str):
+            features = [features]
 
         parts: list[str] = []
         if name:
-            parts.append(f"ชื่อเมนู: {name}")
+            parts.append(f"ชื่อสินค้า: {name}")
         if price is not None:
             parts.append(f"ราคา: {price} บาท")
-        if ingredients:
-            parts.append("ส่วนผสม: " + ", ".join(str(item)
-                         for item in ingredients))
-        return "\n".join(parts) if parts else "ชื่อเมนู: ไม่ระบุ"
+        if features:
+            parts.append("จุดเด่น: " + ", ".join(str(f) for f in features))
+        return "\n".join(parts) if parts else "ชื่อสินค้า: ไม่ระบุ"
 
-    return f"ชื่อเมนู: {parsed_menu}" if parsed_menu else "ชื่อเมนู: ไม่ระบุ"
+    return f"ชื่อสินค้า: {parsed_item}" if parsed_item else "ชื่อสินค้า: ไม่ระบุ"
 
 
 def generate_caption(
-    menu: str | dict[str, Any] | None,
+    item: str | dict[str, Any] | None,
     api_key: str | None = None,
     max_attempts: int = 3,
     style: str = "cute",
 ) -> str:
-    """Generate a Thai caption for the given milk menu item."""
+    """Generate a Thai caption for the given music gear item."""
     key = api_key or os.environ.get("GOOGLE_API_KEY")
     if not key:
         raise RuntimeError("GOOGLE_API_KEY not set in env or argument")
 
-    menu_context = _build_menu_context(menu)
+    item_context = _build_item_context(item)
     client = genai.Client(api_key=key)
 
     for _ in range(max_attempts):
         response = client.models.generate_content(
             model="gemini-2.5-flash",
             contents=PROMPT_TEMPLATE.format(
-                menu_context=menu_context, style=style),
+                item_context=item_context, style=style),
         )
         caption = (getattr(response, "text", None) or "").strip()
         if len(caption) <= 280:
@@ -110,12 +112,12 @@ def generate_caption(
 
 
 def generate_captions(
-    menu: str | dict[str, Any] | None,
+    item: str | dict[str, Any] | None,
     n: int = 1,
     api_key: str | None = None,
     styles: list[str] | None = None,
 ) -> list[str]:
-    """Generate multiple captions for the same menu."""
+    """Generate multiple captions for the same item."""
     if n <= 0:
         return []
 
@@ -124,15 +126,16 @@ def generate_captions(
     if len(style_list) < count:
         style_list = style_list + ["cute"] * (count - len(style_list))
 
-    return [generate_caption(menu, api_key=api_key, style=style_list[index]) for index in range(count)]
+    return [generate_caption(item, api_key=api_key, style=style_list[index]) for index in range(count)]
 
 
 def build_parser() -> argparse.ArgumentParser:
     """Create the CLI argument parser."""
     parser = argparse.ArgumentParser(
-        description="Generate Thai captions for MilkLab menu items")
+        description="Generate Thai captions for Groove & Gear items")
+    # เปลี่ยนจาก --menu เป็น --item เพื่อให้เข้ากับโดเมน (แต่ยังรองรับ --menu เป็น alias)
     parser.add_argument(
-        "--menu", help="Menu name or JSON object with name, price and ingredients")
+        "--item", "--menu", dest="item", help="Item name or JSON object with name, price and features")
     parser.add_argument("--n", type=int, default=3,
                         help="Number of captions to generate")
     return parser
@@ -143,15 +146,15 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
 
-    menu = args.menu
-    if not menu:
-        menu = input("เมนูที่จะโปรโมต: ").strip()
+    item = args.item
+    if not item:
+        item = input("สินค้าที่จะโปรโมต: ").strip()
 
-    if not menu:
-        print("กรุณาใส่ชื่อเมนู")
+    if not item:
+        print("กรุณาใส่ชื่อสินค้า")
         return 1
 
-    captions = generate_captions(menu, n=args.n, styles=[
+    captions = generate_captions(item, n=args.n, styles=[
                                  "cute", "minimal", "gen-z"][: args.n])
     print()
     for index, caption in enumerate(captions, start=1):

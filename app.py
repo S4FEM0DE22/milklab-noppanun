@@ -334,14 +334,14 @@ def main():
             box-sizing: border-box;
             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
             height: 58px !important;
-            left: calc(max(1rem, calc(21rem + 2vw)) + 1rem);
+            left: calc(max(1rem, calc(21rem + 2vw)) + 4.75rem);
             max-width: none !important;
             min-height: 58px !important;
             padding: 0.35rem 0.55rem;
             position: fixed;
             right: calc(2rem + 58px);
             z-index: 1000;
-            width: calc(100vw - max(1rem, calc(21rem + 2vw)) - 2rem - 1rem - 58px) !important;
+            width: auto !important;
         }
         [data-testid="stForm"]:focus-within {
             border-color: rgba(215, 243, 106, 0.5);
@@ -407,6 +407,11 @@ def main():
             transform: translateY(-1px);
         }
         [data-testid="stForm"] [data-testid="stFormSubmitButton"] button:active { transform: translateY(0); }
+        body:has([data-testid="stSidebar"][aria-expanded="false"]) [data-testid="stForm"] {
+            left: calc(4vw + 1.7rem);
+            right: calc(4vw + 2.25rem);
+            width: auto !important;
+        }
         .stButton > button {
             border: 1px solid var(--line); border-radius: 6px; background: var(--panel);
             color: var(--ink); text-align: left; transition: border-color 150ms ease, transform 150ms ease;
@@ -414,6 +419,14 @@ def main():
         .stButton > button:hover { border-color: var(--lime); color: var(--lime); transform: translateY(-1px); }
         .stButton > button:focus-visible { border-color: var(--lime); box-shadow: 0 0 0 2px rgba(215, 243, 106, 0.2); }
         [data-testid="stExpander"] { border: 1px solid var(--line); border-radius: 8px; background: rgba(23, 26, 25, 0.5); }
+        @media (max-width: 900px) {
+            [data-testid="stForm"] {
+                left: 1rem;
+                right: 1rem;
+                width: auto !important;
+            }
+            [data-testid="stForm"] [data-testid="stTextInput"] { width: 100% !important; }
+        }
         @media (max-width: 640px) {
             .service-strip { grid-template-columns: 1fr; }
             .service-item { border-bottom: 1px solid var(--line); border-right: 0; }

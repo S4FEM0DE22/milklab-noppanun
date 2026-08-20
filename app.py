@@ -170,14 +170,34 @@ def scroll_to_latest_message():
         """
         <script>
         window.setTimeout(() => {
-            const messages = window.parent.document.querySelectorAll(
+            const document = window.parent.document;
+            const messages = document.querySelectorAll(
                 '[data-testid="stChatMessage"]'
             );
             const latestMessage = messages[messages.length - 1];
             if (latestMessage) {
-                latestMessage.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                latestMessage.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                window.setTimeout(() => {
+                    const composer = document.querySelector('[data-testid="stForm"]');
+                    const messageBottom = latestMessage.getBoundingClientRect().bottom;
+                    const safeBottom = composer
+                        ? composer.getBoundingClientRect().top - 16
+                        : window.innerHeight - 16;
+                    const overlap = messageBottom - safeBottom;
+                    if (overlap > 0) {
+                        const scrollContainer = document.querySelector(
+                            '[data-testid="stAppScrollToBottomContainer"]'
+                        );
+                        if (scrollContainer) {
+                            scrollContainer.scrollBy({ top: overlap, behavior: 'smooth' });
+                        } else {
+                            window.parent.scrollBy({ top: overlap, behavior: 'smooth' });
+                        }
+                    }
+                }, 350);
             }
-        }, 100);
+        }, 300);
         </script>
         """,
         height=0,
@@ -306,8 +326,8 @@ def main():
             box-shadow: 0 0 0 1px rgba(215, 243, 106, 0.05);
         }
         [data-testid="stForm"] {
-            background: #252631;
-            border: 1px solid rgba(244, 241, 232, 0.05);
+            background: linear-gradient(135deg, #252631 0%, #292a36 100%);
+            border: 1px solid rgba(244, 241, 232, 0.1);
             border-radius: 9px;
             bottom: 2rem;
             align-self: flex-start !important;
@@ -323,6 +343,10 @@ def main():
             z-index: 1000;
             width: calc(100vw - max(1rem, calc(21rem + 2vw)) - 2rem - 1rem - 58px) !important;
         }
+        [data-testid="stForm"]:focus-within {
+            border-color: rgba(215, 243, 106, 0.5);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28), 0 0 0 3px rgba(215, 243, 106, 0.08);
+        }
         [data-testid="stForm"] [data-testid="stVerticalBlock"] {
             align-items: center;
             gap: 0;
@@ -335,7 +359,7 @@ def main():
         }
         [data-testid="stForm"] [data-testid="stTextInput"] {
             margin: 0;
-            width: 100% !important;
+            width: calc(100% + 1.25rem) !important;
         }
         [data-testid="stForm"] [data-testid="stTextInput"] > div {
             min-height: 0;
@@ -344,12 +368,20 @@ def main():
             background: transparent;
             border: 0;
             color: var(--ink);
+            font-size: 0.86rem;
             height: 42px;
             padding: 0 0.65rem;
+        }
+        [data-testid="stForm"] [data-testid="stTextInput"] input::placeholder {
+            color: #b9bac4;
+            opacity: 0.9;
         }
         [data-testid="stForm"] [data-testid="stTextInput"] input:focus {
             border: 0;
             box-shadow: none;
+        }
+        [data-testid="stForm"] small {
+            display: none;
         }
         [data-testid="stForm"] [data-testid="stFormSubmitButton"] button {
             background: #3b3c48;
@@ -362,6 +394,7 @@ def main():
             min-height: 42px;
             padding: 0;
             text-align: center;
+            transition: background 160ms ease, color 160ms ease, transform 160ms ease;
             width: 42px;
         }
         [data-testid="stForm"] [data-testid="stFormSubmitButton"] {
@@ -371,7 +404,9 @@ def main():
         [data-testid="stForm"] [data-testid="stFormSubmitButton"] button:hover {
             background: var(--lime);
             color: #101211;
+            transform: translateY(-1px);
         }
+        [data-testid="stForm"] [data-testid="stFormSubmitButton"] button:active { transform: translateY(0); }
         .stButton > button {
             border: 1px solid var(--line); border-radius: 6px; background: var(--panel);
             color: var(--ink); text-align: left; transition: border-color 150ms ease, transform 150ms ease;
@@ -833,7 +868,7 @@ def main():
 
     prompt = None
     with st.form("chat_form", clear_on_submit=True):
-        input_column, submit_column = st.columns([6, 1], gap="small")
+        input_column, submit_column = st.columns([1, 0.08], gap="small")
         with input_column:
             typed_prompt = st.text_input(
                 "คำถาม",
@@ -870,6 +905,7 @@ def main():
         st.session_state.messages.append(
             {"role": "assistant", "content": answer})
         scroll_to_latest_message()
+
 
 if __name__ == "__main__":
     main()

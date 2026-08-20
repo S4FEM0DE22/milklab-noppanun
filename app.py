@@ -164,16 +164,37 @@ def generate_answer(query: str, context_chunks: list[str]) -> str:
 
 
 def scroll_to_latest_message():
-    """เลื่อนไปท้ายหน้าหลังจาก Streamlit วาดแชตเสร็จ."""
+    """เลื่อนไปยังข้อความล่าสุดหลังจาก Streamlit วาดแชตเสร็จ."""
 
     components.html(
         """
         <script>
         window.setTimeout(() => {
-            const documentElement = window.parent.document.documentElement;
-            const body = window.parent.document.body;
-            const bottom = Math.max(documentElement.scrollHeight, body.scrollHeight);
-            window.parent.scrollTo({ top: bottom, behavior: 'smooth' });
+            const messages = window.parent.document.querySelectorAll(
+                '[data-testid="stChatMessage"]'
+            );
+            const latestMessage = messages[messages.length - 1];
+            if (latestMessage) {
+                latestMessage.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            }
+        }, 100);
+        </script>
+        """,
+        height=0,
+        scrolling=False,
+    )
+
+
+def scroll_to_top():
+    """เลื่อนไปด้านบนเมื่อเปิดหน้าเว็บครั้งแรก."""
+
+    components.html(
+        """
+        <script>
+        window.setTimeout(() => {
+            window.parent.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+            window.parent.document.documentElement.scrollTop = 0;
+            window.parent.document.body.scrollTop = 0;
         }, 100);
         </script>
         """,
@@ -779,6 +800,10 @@ def main():
         st.session_state.messages.append(
             {"role": "assistant", "content": answer})
         scroll_to_latest_message()
+
+    if not st.session_state.get("initial_scroll_done"):
+        scroll_to_top()
+        st.session_state.initial_scroll_done = True
 
 
 if __name__ == "__main__":

@@ -185,24 +185,6 @@ def scroll_to_latest_message():
     )
 
 
-def scroll_to_top():
-    """เลื่อนไปด้านบนเมื่อเปิดหน้าเว็บครั้งแรก."""
-
-    components.html(
-        """
-        <script>
-        window.setTimeout(() => {
-            window.parent.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-            window.parent.document.documentElement.scrollTop = 0;
-            window.parent.document.body.scrollTop = 0;
-        }, 100);
-        </script>
-        """,
-        height=0,
-        scrolling=False,
-    )
-
-
 def main():
     st.set_page_config(
         page_title="Groove & Gear",
@@ -312,14 +294,83 @@ def main():
             background: rgba(23, 26, 25, 0.74);
             border: 1px solid var(--line);
             border-radius: 8px;
+            box-sizing: border-box;
             padding: 1.1rem 1.25rem;
             margin: 0.7rem 0;
+            width: 100%;
             animation: rise-in 500ms ease both;
         }
         [data-testid="stChatInput"] {
             border-color: rgba(215, 243, 106, 0.45);
             border-radius: 8px;
             box-shadow: 0 0 0 1px rgba(215, 243, 106, 0.05);
+        }
+        [data-testid="stForm"] {
+            background: #252631;
+            border: 1px solid rgba(244, 241, 232, 0.05);
+            border-radius: 9px;
+            bottom: 2rem;
+            align-self: flex-start !important;
+            box-sizing: border-box;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+            height: 58px !important;
+            left: calc(max(1rem, calc(21rem + 2vw)) + 1rem);
+            max-width: none !important;
+            min-height: 58px !important;
+            padding: 0.35rem 0.55rem;
+            position: fixed;
+            right: calc(2rem + 58px);
+            z-index: 1000;
+            width: calc(100vw - max(1rem, calc(21rem + 2vw)) - 2rem - 1rem - 58px) !important;
+        }
+        [data-testid="stForm"] [data-testid="stVerticalBlock"] {
+            align-items: center;
+            gap: 0;
+            min-height: 0 !important;
+            width: 100% !important;
+        }
+        [data-testid="stForm"] [data-testid="stHorizontalBlock"] {
+            align-items: center;
+            gap: 0.5rem;
+        }
+        [data-testid="stForm"] [data-testid="stTextInput"] {
+            margin: 0;
+            width: 100% !important;
+        }
+        [data-testid="stForm"] [data-testid="stTextInput"] > div {
+            min-height: 0;
+        }
+        [data-testid="stForm"] [data-testid="stTextInput"] input {
+            background: transparent;
+            border: 0;
+            color: var(--ink);
+            height: 42px;
+            padding: 0 0.65rem;
+        }
+        [data-testid="stForm"] [data-testid="stTextInput"] input:focus {
+            border: 0;
+            box-shadow: none;
+        }
+        [data-testid="stForm"] [data-testid="stFormSubmitButton"] button {
+            background: #3b3c48;
+            border: 0;
+            border-radius: 9px;
+            color: #aeb0bb;
+            font-size: 1.25rem;
+            font-weight: 700;
+            height: 42px;
+            min-height: 42px;
+            padding: 0;
+            text-align: center;
+            width: 42px;
+        }
+        [data-testid="stForm"] [data-testid="stFormSubmitButton"] {
+            display: flex;
+            justify-content: flex-end;
+        }
+        [data-testid="stForm"] [data-testid="stFormSubmitButton"] button:hover {
+            background: var(--lime);
+            color: #101211;
         }
         .stButton > button {
             border: 1px solid var(--line); border-radius: 6px; background: var(--panel);
@@ -334,6 +385,13 @@ def main():
             .service-item:last-child { border-bottom: 0; }
             .hero-copy { font-size: 0.95rem; }
             [data-testid="stChatMessage"] { padding: 0.9rem; }
+            [data-testid="stForm"] {
+                bottom: 1.25rem;
+                left: 0.75rem;
+                right: 0.75rem;
+                width: calc(100vw - 1.5rem) !important;
+            }
+            [data-testid="stForm"] [data-testid="stHorizontalBlock"] { gap: 0.25rem; }
         }
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
@@ -655,7 +713,7 @@ def main():
                             <button id="back" aria-label="ย้อนกลับ 10 วินาที">↶</button>
                             <button id="toggle" aria-label="เล่นหรือหยุดเพลง">▶</button>
                             <button id="forward" aria-label="ข้ามไปข้างหน้า 10 วินาที">↷</button>
-                            <div class="volume-wrap"><span>VOL</span><input id="volume" type="range" min="0" max="1" step="0.05" value="0.7" aria-label="ระดับเสียง"></div>
+                            <div class="volume-wrap"><span>VOL</span><input id="volume" type="range" min="0" max="1" step="0.05" value="0.05" aria-label="ระดับเสียง"></div>
                         </div>
                     </div>
                     <script>
@@ -703,8 +761,8 @@ def main():
                         audio.addEventListener('pause', syncButton);
                         audio.addEventListener('ended', syncButton);
                         audio.addEventListener('error', (e) => {{ console.error('Audio error:', e.target.error); }});
-                        audio.volume = 0.7;
-                        volume.value = 0.7;
+                        audio.volume = 0.05;
+                        volume.value = 0.05;
                         setTimeout(attemptAutoplay, 100);
                     </script>
                     """,
@@ -773,14 +831,26 @@ def main():
             {"role": "assistant", "content": "ยินดีต้อนรับสู่ **Groove & Gear**!\n\nถามสเปคเครื่องดนตรี ปรึกษาเรื่องแอมป์ หรือให้ช่วยจับคู่ gear กับสไตล์ของคุณได้เลยครับ 🎸"}
         ]
 
+    prompt = None
+    with st.form("chat_form", clear_on_submit=True):
+        input_column, submit_column = st.columns([6, 1], gap="small")
+        with input_column:
+            typed_prompt = st.text_input(
+                "คำถาม",
+                placeholder="มีอะไรให้ Groove & Gear ช่วยแนะนำไหมครับ?",
+                label_visibility="collapsed",
+            )
+        with submit_column:
+            submitted = st.form_submit_button("↑", use_container_width=True)
+    if submitted:
+        prompt = typed_prompt.strip()
+    if not prompt and st.session_state.get("pending_prompt"):
+        prompt = st.session_state.pop("pending_prompt")
+
     for msg in st.session_state.messages:
         avatar = "🎧" if msg["role"] == "assistant" else "🧑‍🎤"
         with st.chat_message(msg["role"], avatar=avatar):
             st.write(msg["content"])
-
-    prompt = st.chat_input("มีอะไรให้ Groove & Gear ช่วยแนะนำไหมครับ?")
-    if not prompt and st.session_state.get("pending_prompt"):
-        prompt = st.session_state.pop("pending_prompt")
 
     if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
@@ -800,11 +870,6 @@ def main():
         st.session_state.messages.append(
             {"role": "assistant", "content": answer})
         scroll_to_latest_message()
-
-    if not st.session_state.get("initial_scroll_done"):
-        scroll_to_top()
-        st.session_state.initial_scroll_done = True
-
 
 if __name__ == "__main__":
     main()
